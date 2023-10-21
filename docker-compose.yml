@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+
+  bookstore_db:
+    container_name: bookstore_db
+    image: "postgres"
+    ports:
+      - "5432:5432"
+    deploy:
+      mode: replicated
+      replicas: 1
+    volumes:
+      - ./postgres-data/:/var/lib/postgresql/data/
+    env_file:
+      - .env
+
+
+  bookstore:
+    container_name: bookstore
+    image: shuaibu12345/go-bookstore:1.0.0
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - bookstore_db
+    deploy:
+      mode: replicated
+      replicas: 1
+    env_file:
+      - .env

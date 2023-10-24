@@ -1,15 +1,17 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/shuaibu222/go-bookstore/models"
 	"github.com/shuaibu222/go-bookstore/utils"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -32,7 +34,10 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// user can only be created once no duplicate
 	for _, user := range users {
-		if user.Email == userProfile.Email && user.Username == userProfile.Username {
+		userEmail, emailExists := user["email"]
+		userName, usernameExists := user["username"]
+
+		if emailExists && usernameExists && userEmail == userProfile.Email && userName == userProfile.Username {
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode("This user already exists. Try changing your username and email")
 			return
@@ -51,7 +56,10 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest) // 400 Bad Request status code
 		json.NewEncoder(w).Encode("Invalid email or username and fullname are empty!")
 	} else {
-		u := userProfile.CreateUser()
+		u, err := userProfile.CreateUser()
+		if err != nil {
+			log.Println(err)
+		}
 		json, _ := json.Marshal(u)
 		w.Write(json)
 	}
@@ -72,20 +80,15 @@ func GetUserByID(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	params := mux.Vars(r)
-	ID, err := strconv.ParseInt(params["id"], 0, 0)
+
+	id := utils.JwtUserIdUsername(w, r)
+
+	founded, err := models.GetUserById(params["id"])
 	if err != nil {
-		log.Println("Failed to parse: ", err)
+		log.Println(err)
 	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	founded, _ := models.GetUserById(ID)
-
-	intId, err := strconv.ParseInt(id, 0, 0)
-	if err != nil {
-		log.Println("Failed to parse: ", err)
-	}
-
-	if founded.ID == uint(intId) {
+	if founded.ID.String() == id {
 		user, err := json.Marshal(founded)
 		if err != nil {
 			log.Println("Failed to marshal: ", err)
@@ -99,26 +102,19 @@ func GetUserByID(w http.ResponseWriter, r *http.Request) {
 func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	w.WriteHeader(http.StatusOK)
-
 	userUpdate := &models.UserProfile{}
 	utils.ParseBody(r, userUpdate)
 
 	params := mux.Vars(r)
-	ID, err := strconv.ParseInt(params["id"], 0, 0)
+
+	id := utils.JwtUserIdUsername(w, r)
+	founded, err := models.GetUserById(params["id"])
 	if err != nil {
-		log.Println("Error while parsing id: ", err)
+		log.Println(err)
 	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	founded, db := models.GetUserById(ID)
+	if founded.ID.String() == id {
 
-	intId, err := strconv.ParseInt(id, 0, 0)
-	if err != nil {
-		log.Println("Failed to parse: ", err)
-	}
-
-	if founded.ID == uint(intId) {
 		if userUpdate.Username != "" {
 			founded.Username = userUpdate.Username
 		}
@@ -128,7 +124,8 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 				log.Println("Error generating hashed password: ", err)
 			}
 
-			founded.Password = string(hashedPassword)
+			userUpdate.Password = string(hashedPassword)
+			founded.Password = userUpdate.Password
 		}
 		if userUpdate.Email != "" {
 			founded.Email = userUpdate.Email
@@ -140,47 +137,49 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 			founded.FullName = userUpdate.FullName
 		}
 
-		// TODO: update avatar image
-
-		if err := db.Save(&founded).Error; err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Fatal("Error updating user: ", err)
-			return
+		Id, err := primitive.ObjectIDFromHex(params["id"])
+		if err != nil {
+			log.Println(err)
 		}
 
-		res, _ := json.Marshal(founded)
+		result, err := models.UserColl.UpdateOne(
+			context.Background(),
+			bson.M{"_id": Id},
+			bson.M{"$set": userUpdate},
+		)
+
+		if err != nil {
+			log.Println("Failed to update user: ", err)
+		}
+
+		res, _ := json.Marshal(result)
 		w.Write(res)
 	} else {
 		json.NewEncoder(w).Encode("You are not authorized to edit this profile!")
 	}
 }
 
+// TODO delete issue
+
 func DeleteUserById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
 	params := mux.Vars(r)
-	ID, err := strconv.ParseInt(params["id"], 0, 0)
+
+	id := utils.JwtUserIdUsername(w, r)
+	founded, err := models.GetUserById(params["id"])
 	if err != nil {
-		log.Println("Error while parsing ", err)
+		log.Println(err)
 	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	founded, _ := models.GetUserById(ID)
-
-	intId, err := strconv.ParseInt(id, 0, 0)
-	if err != nil {
-		log.Println("Failed to parse: ", err)
-	}
-
-	if founded.ID == uint(intId) {
-		deleted := models.DeleteUser(ID)
-		deletedUser, err := json.Marshal(deleted.DeletedAt)
+	if founded.ID.String() == id {
+		user, books, err := models.DeleteUser(params["id"])
 		if err != nil {
-			log.Println("Error while marshaling the user: ", err)
+			log.Println(err)
 		}
-		deleteInfo := fmt.Sprintf("The user has been deleted along with his bookstore at: %s", deletedUser)
-		w.Write([]byte(deleteInfo))
+		deleteInfo := fmt.Sprintf("The user %v has been deleted along with his bookstore: %v", user.DeletedCount, books.DeletedCount)
+		json.NewEncoder(w).Encode(deleteInfo)
 	} else {
 		json.NewEncoder(w).Encode("You are not authorized to delete this profile!")
 	}

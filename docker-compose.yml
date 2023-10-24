@@ -4,17 +4,13 @@ services:
 
   bookstore_db:
     container_name: bookstore_db
-    image: "postgres"
+    image: 'mongo'
     ports:
-      - "5432:5432"
-    deploy:
-      mode: replicated
-      replicas: 1
+      - "2701:27017"
     volumes:
-      - ./postgres-data/:/var/lib/postgresql/data/
+      - ./mongo/:/data/db
     env_file:
       - .env
-
 
   bookstore:
     container_name: bookstore
@@ -29,3 +25,6 @@ services:
       replicas: 1
     env_file:
       - .env
+
+volumes:  
+  mongo: {}

@@ -1,62 +1,107 @@
 package models
 
 import (
-	"github.com/shuaibu222/go-bookstore/config"
-	"gorm.io/gorm"
+	"context"
+	"log"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var Mydb *gorm.DB
-
-type Books struct {
-	gorm.Model
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AuthorName         string `json:"author_name"`
-	AuthorBio          string `json:"author_bio"`
-	PublishDate        string `json:"publish_date"`
-	Genre              string `json:"genre"`
-	Privacy            bool   `json:"privacy"`
-	UploadedBook       string `json:"uploaded_book"`
-	UploadedCoverImage string `json:"uploaded_cover_image"`
-	User                      // anonymous user field
+type Book struct {
+	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	Title       string             `bson:"title" json:"title"`
+	Description string             `bson:"description" json:"description"`
+	AuthorName  string             `bson:"author_name" json:"author_name"`
+	AuthorBio   string             `bson:"author_bio" json:"author_bio"`
+	PublishDate string             `bson:"publish_date" json:"publish_date"`
+	Genre       string             `bson:"genre" json:"genre"`
+	Privacy     bool               `bson:"privacy" json:"privacy"`
+	User                           // anonymous user field
 }
 
 type User struct { // anonymous struct
-	UserId   string `json:"user_id"`
-	Username string `json:"username"`
+	UserId string `bson:"user_id" json:"user_id"`
 }
 
-func init() {
-	config.Connect()
-	Mydb = config.GetDb()
-	config.GetDb().AutoMigrate(&Books{})
+func (b *Book) CreateBook() (*mongo.InsertOneResult, error) {
+	inserted, err := BookColl.InsertOne(context.Background(), b)
+	if err != nil {
+		log.Println("Failed creating book", err)
+	}
+	return inserted, nil
 }
 
-func (b *Books) CreateBook() *Books {
-	Mydb.Create(&b)
-	return b
-}
+func GetAllBooks(id string) []primitive.M {
 
-func GetAllBooks(id string) []Books {
-	var books []Books
-	Mydb.Where("user_id=?", id).Find(&books)
+	cur, err := BookColl.Find(context.Background(), bson.M{"user.user_id": id})
+	if err != nil {
+		log.Println(err)
+	}
+
+	var books []primitive.M
+	for cur.Next(context.Background()) {
+		var book bson.M
+		err := cur.Decode(&book)
+		if err != nil {
+			log.Println(err)
+		}
+		books = append(books, book)
+	}
+
+	defer cur.Close(context.Background())
 	return books
 }
 
-func GetPublicBooks() []Books {
-	var books []Books
-	Mydb.Where("privacy=?", false).Find(&books)
+func GetPublicBooks() []primitive.M {
+	cur, err := BookColl.Find(context.Background(), bson.M{"privacy": false})
+	if err != nil {
+		log.Println(err)
+	}
+
+	var books []primitive.M
+	for cur.Next(context.Background()) {
+		var book bson.M
+		err := cur.Decode(&book)
+		if err != nil {
+			log.Println(err)
+		}
+		books = append(books, book)
+	}
+
+	defer cur.Close(context.Background())
 	return books
 }
 
-func GetBookById(id int64) (*Books, *gorm.DB) {
-	var getBook Books
-	db := Mydb.Where("ID=?", id).Find(&getBook)
-	return &getBook, db
+func GetBookById(id string) (Book, error) {
+	var book Book
+
+	ID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Println("Failed to convert id", err)
+	}
+
+	filter := bson.M{"_id": ID}
+	err = BookColl.FindOne(context.Background(), filter).Decode(&book)
+	if err != nil {
+		log.Println("Failed to get book", err)
+	}
+
+	return book, nil
 }
 
-func DeleteBook(Id int64) Books {
-	var book Books
-	Mydb.Where("ID=?", Id).Delete(&book)
-	return book
+func DeleteBook(id string) (*mongo.DeleteResult, error) {
+	ID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Println("Failed to convert id", err)
+	}
+
+	bookFilter := bson.M{"_id": ID}
+	deleted, err := BookColl.DeleteOne(context.Background(), bookFilter)
+	if err != nil {
+		log.Println("Error deleting book", err)
+	}
+
+	return deleted, nil
 }

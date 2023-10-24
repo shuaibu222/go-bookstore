@@ -48,7 +48,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	user = models.GetUserByUsername(cred.UserName)
 	if user.Username == "" {
-		http.Error(w, "user is does not exist", http.StatusUnauthorized)
+		http.Error(w, "user does not exist", http.StatusUnauthorized)
 	} else {
 		err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(enteredPassword))
 		if err != nil {
@@ -62,8 +62,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		// token payload
 		expirationTime := time.Now().Add(5 * time.Minute)
 		claims := &Claims{
-			Username: cred.UserName,
-			UserID:   fmt.Sprint(user.ID),
+			UserID: fmt.Sprint(user.ID),
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(expirationTime),
 			},

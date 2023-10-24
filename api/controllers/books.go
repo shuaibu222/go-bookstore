@@ -1,27 +1,27 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/shuaibu222/go-bookstore/models"
 	"github.com/shuaibu222/go-bookstore/utils"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func CreateNewBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 
-	id, userName := utils.JwtUserIdUsername(w, r)
+	id := utils.JwtUserIdUsername(w, r)
 
-	CreateBook := &models.Books{}
+	CreateBook := &models.Book{}
 
 	// anonymous field to insert user's Id immediately before creating a book instance
 	CreateBook.User.UserId = id
-	CreateBook.User.Username = userName
 
 	// parse the book instance
 	json.NewDecoder(r.Body).Decode(&CreateBook)
@@ -29,14 +29,21 @@ func CreateNewBook(w http.ResponseWriter, r *http.Request) {
 	books := models.GetAllBooks(id)
 
 	for _, book := range books {
-		if CreateBook.Title == book.Title && CreateBook.AuthorName == book.AuthorName {
+		bookTitle, isBookExists := book["title"]
+		bookAuthor, isAuthorExists := book["author_name"]
+
+		if isBookExists && isAuthorExists && bookTitle == CreateBook.Title && bookAuthor == CreateBook.AuthorName {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode("This book already exists. No duplicate books")
 			return
 		}
 	}
 
 	// create a new book instance
-	book := CreateBook.CreateBook()
+	book, err := CreateBook.CreateBook()
+	if err != nil {
+		log.Println(err)
+	}
 	res, err := json.Marshal(book)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -50,7 +57,7 @@ func GetAllUserBooks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	id, _ := utils.JwtUserIdUsername(w, r)
+	id := utils.JwtUserIdUsername(w, r)
 
 	books := models.GetAllBooks(id)
 
@@ -83,15 +90,14 @@ func GetBookById(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	params := mux.Vars(r)
-	ID, err := strconv.ParseInt(params["id"], 0, 0) // convert to int
+
+	id := utils.JwtUserIdUsername(w, r)
+	founded, err := models.GetBookById(params["id"])
 	if err != nil {
-		log.Println("Error while parsing!")
+		log.Println(err)
 	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	founded, _ := models.GetBookById(ID)
-
-	if founded.Privacy && founded.UserId == id {
+	if founded.UserId == id {
 		res, _ := json.Marshal(founded)
 		w.Write(res)
 	} else {
@@ -101,28 +107,41 @@ func GetBookById(w http.ResponseWriter, r *http.Request) {
 
 func UpdateBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 
-	var updateBook = &models.Books{} // initialize a empty book struct to hold the updated values
-	utils.ParseBody(r, updateBook)   // parse the body taken from client request for golang to understand and forward it to the DB
+	var updateBook = &models.Book{} // initialize an empty book struct to hold the updated values
+	utils.ParseBody(r, updateBook)  // parse the body taken from client request for golang to understand and forward it to the DB
+
 	params := mux.Vars(r)
-	bookId := params["id"]
-	ID, err := strconv.ParseInt(bookId, 0, 0) // convert to int
+
+	// get that specific book for updating from URL params
+	id := utils.JwtUserIdUsername(w, r)
+	bookDetails, err := models.GetBookById(params["id"])
 	if err != nil {
-		log.Println("Error while parsing!")
+		log.Println(err)
 	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	bookDetails, db := models.GetBookById(ID)
+	// get all his books and check for duplicates even when editing
+	books := models.GetAllBooks(id)
+
+	for _, book := range books {
+		bookTitle, isBookExists := book["title"]
+		bookAuthor, isAuthorExists := book["author_name"]
+
+		if isBookExists && isAuthorExists && bookTitle == updateBook.Title && bookAuthor == updateBook.AuthorName {
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode("This book already exists. No duplicate books")
+			return
+		}
+	}
 
 	if bookDetails.UserId == id {
+
 		if updateBook.Title != "" {
 			bookDetails.Title = updateBook.Title
 		}
 		if updateBook.Description != "" {
 			bookDetails.Description = updateBook.Description
 		}
-
 		if updateBook.AuthorName != "" {
 			bookDetails.AuthorName = updateBook.AuthorName
 		}
@@ -136,11 +155,23 @@ func UpdateBook(w http.ResponseWriter, r *http.Request) {
 			bookDetails.Genre = updateBook.Genre
 		}
 
-		if err := db.Save(&bookDetails).Error; err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Fatal("Error updating book: ", err)
+		updateBook.User.UserId = id
+
+		Id, err := primitive.ObjectIDFromHex(params["id"])
+		if err != nil {
+			log.Println(err)
 		}
-		res, _ := json.Marshal(bookDetails)
+
+		result, err := models.BookColl.UpdateOne(
+			context.Background(),
+			bson.M{"_id": Id},
+			bson.M{"$set": updateBook},
+		)
+		if err != nil {
+			log.Println("Failed to update book")
+		}
+
+		res, _ := json.Marshal(result)
 		w.Write(res)
 	} else {
 		json.NewEncoder(w).Encode("You are not authorized to edit this book!")
@@ -152,17 +183,16 @@ func DeleteBook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	params := mux.Vars(r)
-	bookId := params["id"]
-	ID, err := strconv.ParseInt(bookId, 0, 0)
-	if err != nil {
-		log.Println("Error while parsing!: ", err)
-	}
 
-	id, _ := utils.JwtUserIdUsername(w, r)
-	bookUserId, _ := models.GetBookById(ID)
+	id := utils.JwtUserIdUsername(w, r)
+	bookUserId, _ := models.GetBookById(params["id"])
 
 	if bookUserId.UserId == id {
-		book := models.DeleteBook(ID)
+		book, err := models.DeleteBook(params["id"])
+		if err != nil {
+			log.Println(err)
+		}
+
 		res, _ := json.Marshal(book)
 		w.Write(res)
 	} else {

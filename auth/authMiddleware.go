@@ -50,7 +50,6 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Attach the user information to the request context
 		ctx := context.WithValue(r.Context(), "user", claims.Username)
 		r = r.WithContext(ctx)
-
 		// Call the next handler
 		next.ServeHTTP(w, r)
 	}

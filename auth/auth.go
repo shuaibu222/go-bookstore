@@ -25,7 +25,7 @@ type Claims struct {
 }
 
 type Cookie struct {
-	Name string `json:"cookie"`
+	Name string `json:"token"`
 }
 
 var jwtSecretKey []byte
@@ -89,6 +89,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		cok := Cookie{
 			Name: tokenString,
 		}
+
+		c, _ := r.Cookie("token")
+		log.Println(c)
+		fmt.Printf("r.Cookies(): %v\n", r.Cookies())
 
 		tkn, _ := json.Marshal(cok)
 		w.Write(tkn)

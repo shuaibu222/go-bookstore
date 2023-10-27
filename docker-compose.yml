@@ -6,7 +6,7 @@ services:
     container_name: bookstore_db
     image: 'mongo'
     ports:
-      - "2701:27017"
+      - "2702:27017"
     volumes:
       - ./mongo/:/data/db
     env_file:

@@ -90,10 +90,6 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			Name: tokenString,
 		}
 
-		c, _ := r.Cookie("token")
-		log.Println(c)
-		fmt.Printf("r.Cookies(): %v\n", r.Cookies())
-
 		tkn, _ := json.Marshal(cok)
 		w.Write(tkn)
 	}

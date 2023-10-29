@@ -14,7 +14,6 @@ services:
 
   bookstore:
     container_name: bookstore
-    image: shuaibu12345/go-bookstore:1.0.0
     build: .
     ports:
       - "8000:8000"

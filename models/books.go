@@ -22,7 +22,8 @@ type Book struct {
 }
 
 type User struct { // anonymous struct
-	UserId string `bson:"user_id" json:"user_id"`
+	UserId   string `bson:"user_id" json:"user_id"`
+	UserName string `bson:"user_name" json:"user_name"`
 }
 
 func (b *Book) CreateBook() (*mongo.InsertOneResult, error) {

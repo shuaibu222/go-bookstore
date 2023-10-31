@@ -62,7 +62,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		// token payload
 		expirationTime := time.Now().Add(24 * time.Hour)
 		claims := &Claims{
-			UserID: fmt.Sprint(user.ID),
+			UserID:   fmt.Sprint(user.ID),
+			Username: user.Username,
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(expirationTime),
 			},

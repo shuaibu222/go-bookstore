@@ -81,7 +81,7 @@ func GetUserByID(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 
 	founded, err := models.GetUserById(params["id"])
 	if err != nil {
@@ -107,7 +107,7 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 	founded, err := models.GetUserById(params["id"])
 	if err != nil {
 		log.Println(err)
@@ -167,7 +167,7 @@ func DeleteUserById(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 	founded, err := models.GetUserById(params["id"])
 	if err != nil {
 		log.Println(err)

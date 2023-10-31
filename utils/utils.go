@@ -21,7 +21,7 @@ func ParseBody(r *http.Request, x interface{}) {
 	}
 }
 
-func JwtUserIdUsername(w http.ResponseWriter, r *http.Request) string {
+func JwtUserIdUsername(w http.ResponseWriter, r *http.Request) (string, string) {
 	config, err := config.LoadConfig()
 	if err != nil {
 		log.Println("Error while loading envs: ", err)
@@ -54,6 +54,7 @@ func JwtUserIdUsername(w http.ResponseWriter, r *http.Request) string {
 
 	// id and username from jwt claims
 	id := claims.UserID
+	username := claims.Username
 
-	return id
+	return id, username
 }

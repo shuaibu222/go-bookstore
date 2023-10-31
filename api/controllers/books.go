@@ -16,12 +16,13 @@ import (
 func CreateNewBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, username := utils.JwtUserIdUsername(w, r)
 
 	CreateBook := &models.Book{}
 
 	// anonymous field to insert user's Id immediately before creating a book instance
 	CreateBook.User.UserId = id
+	CreateBook.User.UserName = username
 
 	// parse the book instance
 	json.NewDecoder(r.Body).Decode(&CreateBook)
@@ -57,7 +58,7 @@ func GetAllUserBooks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 
 	books := models.GetAllBooks(id)
 
@@ -91,7 +92,7 @@ func GetBookById(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 	founded, err := models.GetBookById(params["id"])
 	if err != nil {
 		log.Println(err)
@@ -114,7 +115,7 @@ func UpdateBook(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	// get that specific book for updating from URL params
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 	bookDetails, err := models.GetBookById(params["id"])
 	if err != nil {
 		log.Println(err)
@@ -184,7 +185,7 @@ func DeleteBook(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 
-	id := utils.JwtUserIdUsername(w, r)
+	id, _ := utils.JwtUserIdUsername(w, r)
 	bookUserId, _ := models.GetBookById(params["id"])
 
 	if bookUserId.UserId == id {

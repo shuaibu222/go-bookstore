@@ -41,12 +41,12 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	jwtSecretKey = []byte(config.JWTSecret)
 
 	var cred LoginCredentials
-	var user models.UserProfile
+	// var user models.UserProfile
 
 	json.NewDecoder(r.Body).Decode(&cred)
 	enteredPassword := cred.Password
 
-	user = models.GetUserByUsername(cred.UserName)
+	user := models.GetUserByUsername(cred.UserName)
 	if user.Username == "" {
 		http.Error(w, "user does not exist", http.StatusUnauthorized)
 	} else {
